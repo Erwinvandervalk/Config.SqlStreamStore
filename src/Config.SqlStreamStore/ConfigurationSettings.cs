@@ -21,7 +21,6 @@ namespace Config.SqlStreamStore
         public readonly IReadOnlyDictionary<string, string> Settings;
 
         public int Version { get; }
-
         public readonly DateTime? LastModified;
 
         public IConfigurationSettings Modify(params (string Key, string Value)[] modifications)

@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Threading;
@@ -9,6 +8,7 @@ using Xunit;
 namespace Config.SqlStreamStore.Tests
 {
 
+    // Optimistic concurrency checks
     // Can read settings from sql stream
     // Can write settings to a stream
     // Can roll back to a version
@@ -20,7 +20,7 @@ namespace Config.SqlStreamStore.Tests
 
         public ConfigRepositoryTests()
         {
-            _configRepository = new ConfigRepository(new InMemoryStreamStore(), () => DateTime.Now);
+            _configRepository = new ConfigRepository(new InMemoryStreamStore());
         }
         
         [Fact]

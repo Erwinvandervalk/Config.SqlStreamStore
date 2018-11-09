@@ -4,21 +4,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using SqlStreamStore;
-using SqlStreamStore.Infrastructure;
 using SqlStreamStore.Streams;
 
 namespace Config.SqlStreamStore
 {
-    public class ConfigRepository
+    public interface IConfigRepository
+    {
+        Task<ConfigurationSettings> GetLatest(CancellationToken ct);
+    }
+
+    public class ConfigRepository : IConfigRepository
     {
         private readonly IStreamStore _streamStore;
-        private readonly GetUtcNow _getUtcNow;
         private readonly StreamId _streamId;
 
-        public ConfigRepository(IStreamStore streamStore, GetUtcNow getUtcNow, string streamId = Constants.DefaultStreamName)
+        public ConfigRepository(IStreamStore streamStore, string streamId = Constants.DefaultStreamName)
         {
             _streamStore = streamStore;
-            _getUtcNow = getUtcNow;
             _streamId = streamId;
         }
 
@@ -57,7 +59,7 @@ namespace Config.SqlStreamStore
                 message: new NewStreamMessage(Guid.NewGuid(), Constants.ConfigChangedMessageName, JsonConvert.SerializeObject(changes)), 
                 cancellationToken:ct);
 
-            return new ConfigurationSettings(result.CurrentVersion, _getUtcNow(), changes.AllSettings);
+            return new ConfigurationSettings(result.CurrentVersion, null, changes.AllSettings);
         }
         
     }
