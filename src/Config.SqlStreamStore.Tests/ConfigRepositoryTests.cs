@@ -14,7 +14,6 @@ namespace Config.SqlStreamStore.Tests
     // Can roll back to a version
     // 
 
-
     public class ConfigRepositoryTests
     {
         private ConfigRepository _configRepository;
