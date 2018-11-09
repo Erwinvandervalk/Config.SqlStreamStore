@@ -10,6 +10,10 @@ using Xunit;
 
 namespace Config.SqlStreamStore.Tests
 {
+
+    // Ability to read connection string from config. 
+    // Reload config when new data arrives. 
+
     public class StreamStoreConfigurationProviderTests
     {
         protected internal InMemoryStreamStore SqlStreamStoreInstance { get; set; }
