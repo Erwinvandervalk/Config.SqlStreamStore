@@ -9,58 +9,18 @@ namespace Config.SqlStreamStore
 {
     public class StreamStoreConfigurationProvider : ConfigurationProvider
     {
-        private bool _loaded = false;
-        private readonly Func<IConfigRepository> _getConfigRepository;
-        private IConfigRepository _configRepository;
+        private readonly IConfigRepository _configRepository;
 
-        public StreamStoreConfigurationProvider(Func<IConfigRepository> getConfigRepository)
+        public StreamStoreConfigurationProvider(IConfigRepository configRepository)
         {
-            _getConfigRepository = getConfigRepository;
+            _configRepository = configRepository;
         }
-
-        public override bool TryGet(string key, out string value)
+        public override void Load()
         {
-            if (!_loaded)
-            {
-                LoadSettings();
-            }
-
-            return Data.TryGetValue(key, out value);
-        }
-
-        private void LoadSettings()
-        {
-            if (GetConfigRepository() == null)
-            {
-                throw new InvalidOperationException("The configuration repository has not yet been initialized.");
-            }
-
-            var settings = GetConfigRepository()
+            var settings = _configRepository
                 .GetLatest(CancellationToken.None).GetAwaiter().GetResult();
 
             Data = settings.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
-
-            _loaded = true;
-        }
-
-
-        IConfigRepository GetConfigRepository()
-        {
-            if (_configRepository == null)
-            {
-                _configRepository = _getConfigRepository();
-            }
-
-            return _configRepository;
-        }
-
-        public override void Load()
-        {
-            if (GetConfigRepository() != null)
-            {
-                LoadSettings();
-            }
-
         }
     }
 }
