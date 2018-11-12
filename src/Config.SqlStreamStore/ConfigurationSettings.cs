@@ -18,12 +18,16 @@ namespace Config.SqlStreamStore
                     ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
+        public static ConfigurationSettings Empty() => new ConfigurationSettings();
+        public static ConfigurationSettings Create(params (string Key, string Value)[] initialValues) => new ConfigurationSettings(
+            settings: initialValues.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase));
+
         public readonly IReadOnlyDictionary<string, string> Settings;
 
         public int Version { get; }
         public readonly DateTime? LastModified;
 
-        public IConfigurationSettings Modify(params (string Key, string Value)[] modifications)
+        public ModifiedConfigurationSettings WithModifiedSettings(params (string Key, string Value)[] modifications)
         {
             var modified = Settings.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             foreach (var modification in modifications)
@@ -33,16 +37,14 @@ namespace Config.SqlStreamStore
             return new ModifiedConfigurationSettings(this, modified);
         }
 
-        public IConfigurationSettings Set(IReadOnlyDictionary<string, string> replacement)
+        public ModifiedConfigurationSettings WithAllSettingsReplaced(IReadOnlyDictionary<string, string> replacement)
         {
             return new ModifiedConfigurationSettings(this, replacement ?? new ReadOnlyDictionary<string, string>(new Dictionary<string, string>()));
         }
 
-        public IConfigurationSettings Delete(params string[] deletions)
+        public ModifiedConfigurationSettings WithDeletedKeys(params string[] deletions)
         {
-            if (deletions == null || !deletions.Any())
-                return this;
-
+            if (deletions == null) throw new ArgumentNullException(nameof(deletions));
             var modified = Settings.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             foreach (var deletion in deletions)
             {

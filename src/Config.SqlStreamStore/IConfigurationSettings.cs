@@ -6,8 +6,8 @@ namespace Config.SqlStreamStore
     {
         int Version { get; }
 
-        IConfigurationSettings Modify(params (string Key, string Value)[] modifications);
-        IConfigurationSettings Set(IReadOnlyDictionary<string, string> replacement);
-        IConfigurationSettings Delete(params string[] deletions);
+        ModifiedConfigurationSettings WithModifiedSettings(params (string Key, string Value)[] modifications);
+        ModifiedConfigurationSettings WithAllSettingsReplaced(IReadOnlyDictionary<string, string> replacement);
+        ModifiedConfigurationSettings WithDeletedKeys(params string[] deletions);
     }
 }

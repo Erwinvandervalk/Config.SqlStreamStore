@@ -10,7 +10,7 @@ namespace Config.SqlStreamStore
     {
         public readonly ConfigurationSettings OriginalSettings;
 
-        public readonly IReadOnlyDictionary<string, string> Changes;
+        public readonly IReadOnlyDictionary<string, string> NewValues;
 
         public int Version => OriginalSettings.Version;
 
@@ -22,13 +22,13 @@ namespace Config.SqlStreamStore
 
         public ModifiedConfigurationSettings(ConfigurationSettings originalSettings, IReadOnlyDictionary<string, string> changes)
         {
-            OriginalSettings = originalSettings ?? new ConfigurationSettings();
-            Changes = changes ?? throw new ArgumentNullException(nameof(changes));
+            OriginalSettings = originalSettings ?? ConfigurationSettings.Empty();
+            NewValues = changes ?? throw new ArgumentNullException(nameof(changes));
         }
 
-        public IConfigurationSettings Modify(params (string Key, string Value)[] modifications)
+        public ModifiedConfigurationSettings WithModifiedSettings(params (string Key, string Value)[] modifications)
         {
-            var modified = Changes.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+            var modified = NewValues.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             foreach (var modification in modifications)
             {
                 modified[modification.Key] = modification.Value;
@@ -37,14 +37,14 @@ namespace Config.SqlStreamStore
         }
 
 
-        public IConfigurationSettings Set(IReadOnlyDictionary<string, string> replacement)
+        public ModifiedConfigurationSettings WithAllSettingsReplaced(IReadOnlyDictionary<string, string> replacement)
         {
             return new ModifiedConfigurationSettings(OriginalSettings, replacement);
         }
 
-        public IConfigurationSettings Delete(params string[] deletions)
+        public ModifiedConfigurationSettings WithDeletedKeys(params string[] deletions)
         {
-            var modified = Changes.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+            var modified = NewValues.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             foreach (var deletion in deletions)
             {
                 modified.Remove(deletion);
@@ -55,11 +55,11 @@ namespace Config.SqlStreamStore
         public ConfigChanged GetChanges()
         {
             var deleted = new HashSet<string>(
-                collection: OriginalSettings.Settings.Keys.Where(x => !Changes.ContainsKey(x)),
+                collection: OriginalSettings.Settings.Keys.Where(x => !NewValues.ContainsKey(x)),
                 comparer: StringComparer.InvariantCultureIgnoreCase);
 
             var modified = new HashSet<string>(
-                collection: Changes.Where(IsModified).Select(x => x.Key), 
+                collection: NewValues.Where(IsModified).Select(x => x.Key), 
                 comparer: StringComparer.InvariantCultureIgnoreCase);
 
             if (!deleted.Any() && !modified.Any())
@@ -68,7 +68,7 @@ namespace Config.SqlStreamStore
                 return null;
             }
             return new ConfigChanged(
-                allSettings: Changes.ToDictionary(x => x.Key, x => x.Value), 
+                allSettings: NewValues.ToDictionary(x => x.Key, x => x.Value), 
                 modifiedSettings: modified, 
                 deletedSettings: deleted);
         }
@@ -87,30 +87,30 @@ namespace Config.SqlStreamStore
 
         public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
         {
-            return Changes.GetEnumerator();
+            return NewValues.GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator()
         {
-            return ((IEnumerable) Changes).GetEnumerator();
+            return ((IEnumerable) NewValues).GetEnumerator();
         }
 
-        public int Count => Changes.Count;
+        public int Count => NewValues.Count;
 
         public bool ContainsKey(string key)
         {
-            return Changes.ContainsKey(key);
+            return NewValues.ContainsKey(key);
         }
 
         public bool TryGetValue(string key, out string value)
         {
-            return Changes.TryGetValue(key, out value);
+            return NewValues.TryGetValue(key, out value);
         }
 
-        public string this[string key] => Changes[key];
+        public string this[string key] => NewValues[key];
 
-        public IEnumerable<string> Keys => Changes.Keys;
+        public IEnumerable<string> Keys => NewValues.Keys;
 
-        public IEnumerable<string> Values => Changes.Values;
+        public IEnumerable<string> Values => NewValues.Values;
     }
 }

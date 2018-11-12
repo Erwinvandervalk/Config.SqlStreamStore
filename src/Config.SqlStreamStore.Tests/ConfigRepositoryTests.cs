@@ -42,7 +42,7 @@ namespace Config.SqlStreamStore.Tests
         {
             var settings = await SaveSettings(BuildNewSettings());
 
-            var modified = settings.Modify(("setting1", "newValue"));
+            var modified = settings.WithModifiedSettings(("setting1", "newValue"));
 
             Assert.NotEqual(settings, modified);
 
@@ -57,7 +57,7 @@ namespace Config.SqlStreamStore.Tests
         {
             var settings = await SaveSettings(BuildNewSettings());
 
-            var modified = settings.Delete("setting1");
+            var modified = settings.WithDeletedKeys("setting1");
 
             Assert.NotEqual(settings, modified);
 
@@ -90,7 +90,7 @@ namespace Config.SqlStreamStore.Tests
             var subscription = _configRepository.SubscribeToChanges(settings.Version, OnSettingsChanged,
                 ct: CancellationToken.None);
 
-            var modified = await _configRepository.WriteChanges(settings.Modify(("setting1", "newValue")), CancellationToken.None);
+            var modified = await _configRepository.WriteChanges(settings.WithModifiedSettings(("setting1", "newValue")), CancellationToken.None);
 
             var noftifiedSettings = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(1)));
 

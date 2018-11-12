@@ -42,7 +42,7 @@ namespace Config.SqlStreamStore
 
             if (lastPage.Status == PageReadStatus.StreamNotFound)
             {
-                return new ConfigurationSettings();
+                return ConfigurationSettings.Empty();
             }
 
             var lastMessage = lastPage.Messages.First();
@@ -63,7 +63,7 @@ namespace Config.SqlStreamStore
             params (string Key, string Value)[] modifications)
         {
             var currentData = await GetLatest(ct);
-            var modified = currentData.Modify(modifications);
+            var modified = currentData.WithModifiedSettings(modifications);
             return await WriteChanges(modified, ct);
         }
 
