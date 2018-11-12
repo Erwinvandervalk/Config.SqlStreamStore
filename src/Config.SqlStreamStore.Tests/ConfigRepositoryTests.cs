@@ -8,10 +8,9 @@ namespace Config.SqlStreamStore.Tests
 {
 
     // Optimistic concurrency checks
-    // Can read settings from sql stream
-    // Can write settings to a stream
     // Can roll back to a version
-    // 
+    // wait until sql is available
+    // configure stream name
 
     public class ConfigRepositoryTests
     {

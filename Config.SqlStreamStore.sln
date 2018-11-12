@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Config.SqlStreamStore", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Config.SqlStreamStore.Tests", "src\Config.SqlStreamStore.Tests\Config.SqlStreamStore.Tests.csproj", "{E5C986D9-5100-4A8E-8617-12AE0FAE064C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Config.SqlstreamStore.Example", "src\Config.SqlstreamStore.Example\Config.SqlstreamStore.Example.csproj", "{4470477D-A3F1-4653-AB90-0772C720C257}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,9 +48,22 @@ Global
 		{E5C986D9-5100-4A8E-8617-12AE0FAE064C}.Release|x64.Build.0 = Release|Any CPU
 		{E5C986D9-5100-4A8E-8617-12AE0FAE064C}.Release|x86.ActiveCfg = Release|Any CPU
 		{E5C986D9-5100-4A8E-8617-12AE0FAE064C}.Release|x86.Build.0 = Release|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Debug|x64.Build.0 = Debug|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Debug|x86.Build.0 = Debug|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Release|x64.ActiveCfg = Release|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Release|x64.Build.0 = Release|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Release|x86.ActiveCfg = Release|Any CPU
+		{4470477D-A3F1-4653-AB90-0772C720C257}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{178F5A5D-9027-44BB-BA32-70ED75996275} = {7317961C-320E-4B68-A79B-39E066908D2D}
 		{E5C986D9-5100-4A8E-8617-12AE0FAE064C} = {7317961C-320E-4B68-A79B-39E066908D2D}
+		{4470477D-A3F1-4653-AB90-0772C720C257} = {7317961C-320E-4B68-A79B-39E066908D2D}
 	EndGlobalSection
 EndGlobal

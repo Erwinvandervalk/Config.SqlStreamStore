@@ -4,12 +4,39 @@ using SqlStreamStore;
 
 namespace Config.SqlStreamStore
 {
+    public static class ConfigurationBuilerExtensions
+    {
+        public static IConfigurationBuilder AddStreamStore(this IConfigurationBuilder builder,
+            BuildStreamStoreFromConfig factory,
+            bool subscribeToChanges = false)
+        {
+            builder.Add(new StreamStoreConfigurationSource(factory)
+            {
+                SubscribeToChanges = subscribeToChanges
+            });
+            return builder;
+        }
+
+        public static IConfigurationBuilder AddStreamStore(this IConfigurationBuilder builder,
+            string connectionStringKey,
+            BuildStreamStoreFromConnectionString factory, 
+            bool subscribeToChanges = false)
+        {
+            builder.Add(new StreamStoreConfigurationSource(connectionStringKey, factory)
+            {
+                SubscribeToChanges = subscribeToChanges
+            });
+            return builder;
+        }
+    }
+
+    public delegate IStreamStore BuildStreamStoreFromConnectionString(string connectionString);
+    public delegate IStreamStore BuildStreamStoreFromConfig(IConfigurationRoot configurationRoot);
+    public delegate IConfigRepository BuildConfigRepository();
+
     public class StreamStoreConfigurationSource : IConfigurationSource
     {
 
-        public delegate IStreamStore BuildStreamStoreFromConnectionString(string connectionString);
-        public delegate IStreamStore BuildStreamStoreFromConfig(IConfigurationRoot configurationRoot);
-        public delegate IConfigRepository BuildConfigRepository();
         private readonly BuildStreamStoreFromConfig _buildStreamStoreFromConfig;
 
         public bool SubscribeToChanges { get; set; }

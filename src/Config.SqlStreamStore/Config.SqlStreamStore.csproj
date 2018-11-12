@@ -10,7 +10,4 @@
     <PackageReference Include="sqlstreamstore" Version="1.1.3" />
   </ItemGroup>
 
-  <ItemGroup>
-  </ItemGroup>
-
 </Project>
