@@ -28,7 +28,7 @@ namespace Config.SqlStreamStore
 
         public IConfigurationSettings Modify(params (string Key, string Value)[] modifications)
         {
-            var modified = this.Changes.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+            var modified = Changes.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             foreach (var modification in modifications)
             {
                 modified[modification.Key] = modification.Value;
@@ -44,7 +44,7 @@ namespace Config.SqlStreamStore
 
         public IConfigurationSettings Delete(params string[] deletions)
         {
-            var modified = this.Changes.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+            var modified = Changes.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
             foreach (var deletion in deletions)
             {
                 modified.Remove(deletion);
@@ -55,11 +55,11 @@ namespace Config.SqlStreamStore
         public ConfigChanged GetChanges()
         {
             var deleted = new HashSet<string>(
-                collection: this.OriginalSettings.Settings.Keys.Where(x => !this.Changes.ContainsKey(x)),
+                collection: OriginalSettings.Settings.Keys.Where(x => !Changes.ContainsKey(x)),
                 comparer: StringComparer.InvariantCultureIgnoreCase);
 
             var modified = new HashSet<string>(
-                collection: this.Changes.Where(IsModified).Select(x => x.Key), 
+                collection: Changes.Where(IsModified).Select(x => x.Key), 
                 comparer: StringComparer.InvariantCultureIgnoreCase);
 
             if (!deleted.Any() && !modified.Any())
@@ -68,7 +68,7 @@ namespace Config.SqlStreamStore
                 return null;
             }
             return new ConfigChanged(
-                allSettings: this.Changes.ToDictionary(x => x.Key, x => x.Value), 
+                allSettings: Changes.ToDictionary(x => x.Key, x => x.Value), 
                 modifiedSettings: modified, 
                 deletedSettings: deleted);
         }

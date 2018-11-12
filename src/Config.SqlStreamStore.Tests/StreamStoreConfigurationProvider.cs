@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Primitives;
 using SqlStreamStore;
 using Xunit;
 
@@ -29,11 +26,7 @@ namespace Config.SqlStreamStore.Tests
                 .Build();
 
 
-            SqlStreamStoreInstance = new InMemoryStreamStore();
-
-            var repo = new ConfigRepository(SqlStreamStoreInstance);
-            await repo.WriteChanges(new ModifiedConfigurationSettings(
-                ("setting1", "value1")), CancellationToken.None);
+            SqlStreamStoreInstance = await BuildSteamStoreWithSettings(("setting1", "value1"));
 
             Assert.Equal("value1", config.GetValue<string>("setting1"));
         }
@@ -41,115 +34,44 @@ namespace Config.SqlStreamStore.Tests
         [Fact]
         public async Task Can_build_config_source_with_connection_string()
         {
-            const string key = "Config.SqlStreamStore.ConnectionString";
+            const string connectionStringKey = "Config.SqlStreamStore.ConnectionString";
+            const string expectedConnectionString = "not really a conection string, but as good as it gets";
 
             string usedConnectionString = null;
 
-            Func<string, IStreamStore> factory = (s) =>
+            var instance = await BuildSteamStoreWithSettings(("setting1", "value1"));
+
+            IStreamStore BuildStreamStore(string s)
             {
                 usedConnectionString = s;
-                return new InMemoryStreamStore();
-            };
+                return instance;
+            }
+
 
             var config = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string>()
+                .AddInMemoryCollection(new Dictionary<string, string>
                 {
-                    { key , "sql server"}
+                    { connectionStringKey , expectedConnectionString}
                 })
-                .Add(new StreamStoreConfigurationSource(connectionStringKey: key, streamStoreFactory: factory))
+                .Add(new StreamStoreConfigurationSource(connectionStringKey: connectionStringKey, streamStoreFactory: BuildStreamStore))
                 .Build();
 
-            SqlStreamStoreInstance = new InMemoryStreamStore();
+            // Ensure the factory actually used the configured connection string key
+            Assert.Equal(expectedConnectionString, usedConnectionString);
 
-            var repo = new ConfigRepository(SqlStreamStoreInstance);
-            await repo.WriteChanges(new ModifiedConfigurationSettings(
-                ("setting1", "value1")), CancellationToken.None);
-
+            // Ensure setting 1was read from stream store
             Assert.Equal("value1", config.GetValue<string>("setting1"));
-
-        }
-    }
-
-    public class StreamStoreConfigurationSource : IConfigurationSource
-    {
-        private readonly string _connectionStringKey;
-        private readonly Func<IConfigRepository> _getConfigRepository;
-        private Func<string, IStreamStore> _streamStoreFactory;
-
-        public StreamStoreConfigurationSource(string connectionStringKey, Func<string, IStreamStore> streamStoreFactory)
-        {
-            _connectionStringKey = connectionStringKey;
-            _streamStoreFactory = streamStoreFactory;
         }
 
-        public StreamStoreConfigurationSource(Func<IStreamStore> getStreamStore) :
-            this(() => new ConfigRepository(getStreamStore()))
+        private static async Task<InMemoryStreamStore> BuildSteamStoreWithSettings(params (string key, string value)[] settings)
         {
-            
-        }
+            var instance = new InMemoryStreamStore();
 
-        public StreamStoreConfigurationSource(Func<IConfigRepository> getConfigRepository)
-        {
-            _getConfigRepository = getConfigRepository;
-        }
+            var repo = new ConfigRepository(instance);
+            await repo.WriteChanges(new ModifiedConfigurationSettings(
+                settings), CancellationToken.None);
 
-        public IConfigurationProvider Build(IConfigurationBuilder builder)
-        {
-            var getConfigRepository = _getConfigRepository;
-            if (getConfigRepository == null)
-            {
-                getConfigRepository = () =>
-                {
-                    var connectionString = GetConnectionString(builder);
-                    return new ConfigRepository(_streamStoreFactory(connectionString));
-                };
-            }
-
-            return new StreamStoreConfigurationProvider(_getConfigRepository);
-        }
-
-    }
-
-    public class StreamStoreConfigurationProvider : IConfigurationProvider
-    {
-        private readonly Func<IConfigRepository> _getConfigRepository;
-
-        private IConfigurationSettings _settings;
-
-        public StreamStoreConfigurationProvider(Func<IConfigRepository> getConfigRepository)
-        {
-            _getConfigRepository = getConfigRepository;
-        }
-
-        public bool TryGet(string key, out string value)
-        {
-            if (_settings == null)
-            {
-                _settings = _getConfigRepository().GetLatest(CancellationToken.None).GetAwaiter().GetResult();
-            }
-
-            return _settings.TryGetValue(key, out value);
-        }
-
-        public void Set(string key, string value)
-        {
-            // Not going to write to SSS this way..
-        }
-
-        public IChangeToken GetReloadToken()
-        {
-            return new ConfigurationReloadToken();
-        }
-
-        public void Load()
-        {
-
-            //_settings = _getConfigRepository()?.GetLatest(CancellationToken.None).GetAwaiter().GetResult();
-        }
-
-        public IEnumerable<string> GetChildKeys(IEnumerable<string> earlierKeys, string parentPath)
-        {
-            throw new NotImplementedException();
+            return instance;
         }
     }
 }
