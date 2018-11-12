@@ -6,12 +6,13 @@ namespace Config.SqlStreamStore
 {
     public class StreamStoreConfigurationSource : IConfigurationSource
     {
-        private readonly BuildStreamStoreFromConfig _buildStreamStoreFromConfig;
 
         public delegate IStreamStore BuildStreamStoreFromConnectionString(string connectionString);
         public delegate IStreamStore BuildStreamStoreFromConfig(IConfigurationRoot configurationRoot);
-
         public delegate IConfigRepository BuildConfigRepository();
+        private readonly BuildStreamStoreFromConfig _buildStreamStoreFromConfig;
+
+
 
         private readonly BuildConfigRepository _getConfigRepository;
 
@@ -68,7 +69,6 @@ namespace Config.SqlStreamStore
             return new StreamStoreConfigurationProvider(repo);
         
         }
-
 
     }
 }

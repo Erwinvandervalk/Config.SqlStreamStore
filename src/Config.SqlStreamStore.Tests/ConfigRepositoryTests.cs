@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using SqlStreamStore;
@@ -72,6 +73,31 @@ namespace Config.SqlStreamStore.Tests
 
             return await _configRepository.GetLatest(CancellationToken.None);
         }
+
+        [Fact]
+        public async Task Can_subscribe_to_changes()
+        {
+            var settings = await SaveSettings(BuildNewSettings());
+
+            var tcs = new TaskCompletionSource<ConfigurationSettings>();
+
+            Task OnSettingsChanged(ConfigurationSettings configurationSettings, CancellationToken ct)
+            {
+                tcs.SetResult(configurationSettings);
+                return Task.CompletedTask;
+            }
+
+            var subscription = _configRepository.SubscribeToChanges(settings.Version, OnSettingsChanged,
+                ct: CancellationToken.None);
+
+            var modified = await _configRepository.WriteChanges(settings.Modify(("setting1", "newValue")), CancellationToken.None);
+
+            var noftifiedSettings = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(1)));
+
+            Assert.True(tcs.Task.IsCompleted);
+            Assert.Equal(modified, tcs.Task.Result);
+        }
+
 
         private static IConfigurationSettings BuildNewSettings()
         {
