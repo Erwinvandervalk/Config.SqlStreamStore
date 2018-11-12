@@ -14,11 +14,11 @@ namespace Config.SqlStreamStore.Tests
 
     public class ConfigRepositoryTests
     {
-        private ConfigRepository _configRepository;
+        private StreamStoreConfigRepository _streamStoreConfigRepository;
 
         public ConfigRepositoryTests()
         {
-            _configRepository = new ConfigRepository(new InMemoryStreamStore());
+            _streamStoreConfigRepository = new StreamStoreConfigRepository(new InMemoryStreamStore());
         }
         
         [Fact]
@@ -28,10 +28,10 @@ namespace Config.SqlStreamStore.Tests
                 ("setting1", "value1"),
                 ("setting2", "setting2"));
 
-            var result = await _configRepository.WriteChanges(settings, CancellationToken.None);
+            var result = await _streamStoreConfigRepository.WriteChanges(settings, CancellationToken.None);
             Assert.Equal(0, result.Version);
 
-            var saved = await _configRepository.GetLatest(CancellationToken.None);
+            var saved = await _streamStoreConfigRepository.GetLatest(CancellationToken.None);
 
             Assert.Equal(settings, saved);
         }
@@ -66,11 +66,11 @@ namespace Config.SqlStreamStore.Tests
             Assert.False(saved.ContainsKey("setting1"));
         }
 
-        private async Task<ConfigurationSettings> SaveSettings(IConfigurationSettings settings)
+        private async Task<ConfigurationSettings> SaveSettings(ModifiedConfigurationSettings settings)
         {
-            await _configRepository.WriteChanges(settings, CancellationToken.None);
+            await _streamStoreConfigRepository.WriteChanges(settings, CancellationToken.None);
 
-            return await _configRepository.GetLatest(CancellationToken.None);
+            return await _streamStoreConfigRepository.GetLatest(CancellationToken.None);
         }
 
         [Fact]
@@ -86,10 +86,10 @@ namespace Config.SqlStreamStore.Tests
                 return Task.CompletedTask;
             }
 
-            var subscription = _configRepository.SubscribeToChanges(settings.Version, OnSettingsChanged,
+            var subscription = _streamStoreConfigRepository.SubscribeToChanges(settings.Version, OnSettingsChanged,
                 ct: CancellationToken.None);
 
-            var modified = await _configRepository.WriteChanges(settings.WithModifiedSettings(("setting1", "newValue")), CancellationToken.None);
+            var modified = await _streamStoreConfigRepository.WriteChanges(settings.WithModifiedSettings(("setting1", "newValue")), CancellationToken.None);
 
             var noftifiedSettings = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(1)));
 
@@ -97,8 +97,52 @@ namespace Config.SqlStreamStore.Tests
             Assert.Equal(modified, tcs.Task.Result);
         }
 
+        [Fact]
+        public async Task Can_modify_concurrently()
+        {
+            var delayWriting = new TaskCompletionSource<bool>();
+            int count = 0;
+            var waitUntilBothStarted = new TaskCompletionSource<bool>();
+            bool errorHandlerInvoked = false;
+            Task<IConfigurationSettings> StartModification(string value)
+            {
+                return _streamStoreConfigRepository.Modify(
+                    changeSettings: async (currentSettings, ct) =>
+                    {
+                        if (++count == 2)
+                        {
+                            waitUntilBothStarted.SetResult(true);
+                        }
+                        await delayWriting.Task;
+                        return currentSettings.WithModifiedSettings(("setting1", value));
+                    },
+                    errorHandler: (e, i) =>
+                    {
+                        errorHandlerInvoked = true;
+                        return Task.FromResult(true);
+                    },
+                    ct: CancellationToken.None);
+            }
 
-        private static IConfigurationSettings BuildNewSettings()
+            // save initial set of data
+            var saved = await SaveSettings(BuildNewSettings());
+            Assert.Equal(0, saved.Version);
+
+            var t1 = Task.Run(() => StartModification("modified by t1"));
+            var t2 = Task.Run(() => StartModification("modified by t2"));
+
+            await waitUntilBothStarted.Task;
+            delayWriting.SetResult(true);
+
+            await Task.WhenAll(t1, t2);
+
+            saved = await _streamStoreConfigRepository.GetLatest(CancellationToken.None);
+
+            Assert.Equal(2, saved.Version);
+            Assert.True(errorHandlerInvoked);
+        }
+
+        private static ModifiedConfigurationSettings BuildNewSettings()
         {
             var settings = new ModifiedConfigurationSettings(
                 ("setting1", "value1"),

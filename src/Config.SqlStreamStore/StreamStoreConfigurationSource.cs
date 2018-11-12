@@ -7,7 +7,7 @@ namespace Config.SqlStreamStore
 {
     public delegate IStreamStore BuildStreamStoreFromConnectionString(string connectionString);
     public delegate IStreamStore BuildStreamStoreFromConfig(IConfigurationRoot configurationRoot);
-    public delegate IConfigRepository BuildConfigRepository();
+    public delegate IStreamStoreConfigRepository BuildConfigRepository();
 
     public delegate Task<bool> ErrorHandler(Exception ex, int retryCount);
 
@@ -45,7 +45,7 @@ namespace Config.SqlStreamStore
         }
 
         public StreamStoreConfigurationSource(Func<IStreamStore> getStreamStore) :
-            this(() => new ConfigRepository(getStreamStore()))
+            this(() => new StreamStoreConfigRepository(getStreamStore()))
         {
             
         }
@@ -71,7 +71,7 @@ namespace Config.SqlStreamStore
                 }
             }
 
-            var repo = new ConfigRepository(_buildStreamStoreFromConfig(innerBuilder.Build()));
+            var repo = new StreamStoreConfigRepository(_buildStreamStoreFromConfig(innerBuilder.Build()));
 
             return new StreamStoreConfigurationProvider(this, repo);
         

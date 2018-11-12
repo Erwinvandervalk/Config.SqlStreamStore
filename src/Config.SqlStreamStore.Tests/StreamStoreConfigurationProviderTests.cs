@@ -103,7 +103,7 @@ namespace Config.SqlStreamStore.Tests
                 })
                 .Build();
 
-            await new ConfigRepository(instance).Modify(CancellationToken.None,
+            await new StreamStoreConfigRepository(instance).Modify(CancellationToken.None,
                 ("setting1", "modified"));
 
             await WaitUntil(() => config["setting1"] == "modified");
@@ -128,7 +128,7 @@ namespace Config.SqlStreamStore.Tests
             var tcs = new TaskCompletionSource<bool>();
             ChangeToken.OnChange(config.GetReloadToken, () => tcs.SetResult(true));
 
-            await new ConfigRepository(instance).Modify(CancellationToken.None,
+            await new StreamStoreConfigRepository(instance).Modify(CancellationToken.None,
                 ("setting1", "modified"));
 
             var noftifiedSettings = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(1)));
@@ -142,7 +142,7 @@ namespace Config.SqlStreamStore.Tests
         {
             var instance = new InMemoryStreamStore();
 
-            var repo = new ConfigRepository(instance);
+            var repo = new StreamStoreConfigRepository(instance);
             await repo.WriteChanges(new ModifiedConfigurationSettings(
                 settings), CancellationToken.None);
 

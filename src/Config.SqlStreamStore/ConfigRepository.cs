@@ -9,24 +9,24 @@ using SqlStreamStore.Subscriptions;
 
 namespace Config.SqlStreamStore
 {
-    public interface IConfigRepository
+    public interface IStreamStoreConfigRepository
     {
         Task<ConfigurationSettings> GetLatest(CancellationToken ct);
-        Task<IConfigurationSettings> WriteChanges(IConfigurationSettings settings, CancellationToken ct);
+        Task<IConfigurationSettings> WriteChanges(ModifiedConfigurationSettings settings, CancellationToken ct);
 
         IDisposable SubscribeToChanges(int version, 
-            ConfigRepository.OnSettingsChanged onSettingsChanged,
+            StreamStoreConfigRepository.OnSettingsChanged onSettingsChanged,
             CancellationToken ct);
     }
 
-    public class ConfigRepository : IConfigRepository
+    public class StreamStoreConfigRepository : IStreamStoreConfigRepository
     {
         public delegate Task OnSettingsChanged(ConfigurationSettings settings, CancellationToken ct);
 
         private readonly IStreamStore _streamStore;
         private readonly StreamId _streamId;
 
-        public ConfigRepository(IStreamStore streamStore, string streamId = Constants.DefaultStreamName)
+        public StreamStoreConfigRepository(IStreamStore streamStore, string streamId = Constants.DefaultStreamName)
         {
             _streamStore = streamStore;
             _streamId = streamId;
@@ -67,10 +67,35 @@ namespace Config.SqlStreamStore
             return await WriteChanges(modified, ct);
         }
 
-
-        public async Task<IConfigurationSettings> WriteChanges(IConfigurationSettings settings, CancellationToken ct)
+        public async Task<IConfigurationSettings> Modify(
+            Func<IConfigurationSettings, CancellationToken, Task<ModifiedConfigurationSettings>> changeSettings, 
+            ErrorHandler errorHandler,
+            CancellationToken ct)
         {
-            var changes = (settings as ModifiedConfigurationSettings)?.GetChanges();
+            int retryCount = 0;
+            while (!ct.IsCancellationRequested)
+            {
+                var latest = await GetLatest(ct);
+                var changed = await changeSettings(latest, ct);
+                try
+                {
+                    var saved = await WriteChanges(changed, ct);
+                    return saved;
+                }
+                catch (Exception e)
+                {
+                    if (!await errorHandler(e, retryCount++))
+                        throw;
+                }
+            }
+
+            throw new InvalidOperationException("Failed to write configuration settings");
+        }
+
+
+        public async Task<IConfigurationSettings> WriteChanges(ModifiedConfigurationSettings settings, CancellationToken ct)
+        {
+            var changes = settings.GetChanges();
 
             if (changes == null)
                 // Nothing to save

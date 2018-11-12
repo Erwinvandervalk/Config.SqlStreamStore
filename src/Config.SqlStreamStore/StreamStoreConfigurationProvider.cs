@@ -12,14 +12,14 @@ namespace Config.SqlStreamStore
     public class StreamStoreConfigurationProvider : ConfigurationProvider
     {
         private readonly StreamStoreConfigurationSource _source;
-        private readonly IConfigRepository _configRepository;
+        private readonly IStreamStoreConfigRepository _streamStoreConfigRepository;
         private ConfigurationSettings _configurationSettings;
         
         public StreamStoreConfigurationProvider(StreamStoreConfigurationSource source,
-            IConfigRepository configRepository)
+            IStreamStoreConfigRepository streamStoreConfigRepository)
         {
             _source = source;
-            _configRepository = configRepository;
+            _streamStoreConfigRepository = streamStoreConfigRepository;
 
         }
         public override void Load()
@@ -31,7 +31,7 @@ namespace Config.SqlStreamStore
 
                 try
                 {
-                    _configurationSettings = _configRepository
+                    _configurationSettings = _streamStoreConfigRepository
                         .GetLatest(CancellationToken.None).GetAwaiter().GetResult();
 
                     break;
@@ -59,7 +59,7 @@ namespace Config.SqlStreamStore
 
         public IDisposable SubscribeToChanges(CancellationToken ct)
         {
-            return _configRepository.SubscribeToChanges(
+            return _streamStoreConfigRepository.SubscribeToChanges(
                 version: _configurationSettings?.Version ?? 0, 
                 onSettingsChanged: OnChanged, 
                 ct: CancellationToken.None);

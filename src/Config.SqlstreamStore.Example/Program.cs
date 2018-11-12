@@ -108,7 +108,7 @@ namespace Config.SqlstreamStore.Example
                         await store.CreateSchema(ct);
                     }
 
-                    var repo = new ConfigRepository(store);
+                    var repo = new StreamStoreConfigRepository(store);
 
                     while (!ct.IsCancellationRequested)
                     {
