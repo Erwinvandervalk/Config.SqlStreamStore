@@ -29,7 +29,6 @@ namespace Config.SqlStreamStore.Tests
                 .Build();
 
 
-
             SqlStreamStoreInstance = new InMemoryStreamStore();
 
             var repo = new ConfigRepository(SqlStreamStoreInstance);
@@ -38,11 +37,50 @@ namespace Config.SqlStreamStore.Tests
 
             Assert.Equal("value1", config.GetValue<string>("setting1"));
         }
+
+        [Fact]
+        public async Task Can_build_config_source_with_connection_string()
+        {
+            const string key = "Config.SqlStreamStore.ConnectionString";
+
+            string usedConnectionString = null;
+
+            Func<string, IStreamStore> factory = (s) =>
+            {
+                usedConnectionString = s;
+                return new InMemoryStreamStore();
+            };
+
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string>()
+                {
+                    { key , "sql server"}
+                })
+                .Add(new StreamStoreConfigurationSource(connectionStringKey: key, streamStoreFactory: factory))
+                .Build();
+
+            SqlStreamStoreInstance = new InMemoryStreamStore();
+
+            var repo = new ConfigRepository(SqlStreamStoreInstance);
+            await repo.WriteChanges(new ModifiedConfigurationSettings(
+                ("setting1", "value1")), CancellationToken.None);
+
+            Assert.Equal("value1", config.GetValue<string>("setting1"));
+
+        }
     }
 
     public class StreamStoreConfigurationSource : IConfigurationSource
     {
+        private readonly string _connectionStringKey;
         private readonly Func<IConfigRepository> _getConfigRepository;
+        private Func<string, IStreamStore> _streamStoreFactory;
+
+        public StreamStoreConfigurationSource(string connectionStringKey, Func<string, IStreamStore> streamStoreFactory)
+        {
+            _connectionStringKey = connectionStringKey;
+            _streamStoreFactory = streamStoreFactory;
+        }
 
         public StreamStoreConfigurationSource(Func<IStreamStore> getStreamStore) :
             this(() => new ConfigRepository(getStreamStore()))
@@ -57,8 +95,19 @@ namespace Config.SqlStreamStore.Tests
 
         public IConfigurationProvider Build(IConfigurationBuilder builder)
         {
+            var getConfigRepository = _getConfigRepository;
+            if (getConfigRepository == null)
+            {
+                getConfigRepository = () =>
+                {
+                    var connectionString = GetConnectionString(builder);
+                    return new ConfigRepository(_streamStoreFactory(connectionString));
+                };
+            }
+
             return new StreamStoreConfigurationProvider(_getConfigRepository);
         }
+
     }
 
     public class StreamStoreConfigurationProvider : IConfigurationProvider
