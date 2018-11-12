@@ -1,38 +1,15 @@
 ﻿using System;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using SqlStreamStore;
 
 namespace Config.SqlStreamStore
 {
-    public static class ConfigurationBuilerExtensions
-    {
-        public static IConfigurationBuilder AddStreamStore(this IConfigurationBuilder builder,
-            BuildStreamStoreFromConfig factory,
-            bool subscribeToChanges = false)
-        {
-            builder.Add(new StreamStoreConfigurationSource(factory)
-            {
-                SubscribeToChanges = subscribeToChanges
-            });
-            return builder;
-        }
-
-        public static IConfigurationBuilder AddStreamStore(this IConfigurationBuilder builder,
-            string connectionStringKey,
-            BuildStreamStoreFromConnectionString factory, 
-            bool subscribeToChanges = false)
-        {
-            builder.Add(new StreamStoreConfigurationSource(connectionStringKey, factory)
-            {
-                SubscribeToChanges = subscribeToChanges
-            });
-            return builder;
-        }
-    }
-
     public delegate IStreamStore BuildStreamStoreFromConnectionString(string connectionString);
     public delegate IStreamStore BuildStreamStoreFromConfig(IConfigurationRoot configurationRoot);
     public delegate IConfigRepository BuildConfigRepository();
+
+    public delegate Task<bool> ErrorHandler(Exception ex, int retryCount);
 
     public class StreamStoreConfigurationSource : IConfigurationSource
     {
@@ -41,7 +18,10 @@ namespace Config.SqlStreamStore
 
         public bool SubscribeToChanges { get; set; }
 
+        public ErrorHandler ErrorHandler { get; set; }
+
         private readonly BuildConfigRepository _getConfigRepository;
+
 
         public StreamStoreConfigurationSource(BuildStreamStoreFromConfig buildStreamStoreFromConfig)
         {

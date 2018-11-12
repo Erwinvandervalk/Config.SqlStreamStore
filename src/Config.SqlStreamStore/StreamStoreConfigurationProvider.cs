@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,7 +14,7 @@ namespace Config.SqlStreamStore
         private readonly StreamStoreConfigurationSource _source;
         private readonly IConfigRepository _configRepository;
         private ConfigurationSettings _configurationSettings;
-
+        
         public StreamStoreConfigurationProvider(StreamStoreConfigurationSource source,
             IConfigRepository configRepository)
         {
@@ -23,8 +24,29 @@ namespace Config.SqlStreamStore
         }
         public override void Load()
         {
-            _configurationSettings = _configRepository
-                .GetLatest(CancellationToken.None).GetAwaiter().GetResult();
+            int retryCount = 0;
+            while (true)
+            {
+                
+
+                try
+                {
+                    _configurationSettings = _configRepository
+                        .GetLatest(CancellationToken.None).GetAwaiter().GetResult();
+
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    if (_source.ErrorHandler == null)
+                        throw;
+
+                    if (!_source.ErrorHandler(ex, retryCount++).GetAwaiter().GetResult())
+                    {
+                        throw;
+                    }
+                }
+            }
 
             Data = _configurationSettings.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
 

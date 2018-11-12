@@ -27,31 +27,54 @@ namespace Config.SqlstreamStore.Example
                 .Build();
 
             // On a background thread, create the database and start initializing 
-            Task.Run(() => CreateDatabase(ini["ConnectionString"], cts.Token), cts.Token);
+            Task.Run(async () => await CreateDatabase(ini["ConnectionString"], cts.Token), cts.Token);
 
-            IStreamStore store = null;
+            IStreamStore streamStore = null;
 
             var sssConfig = new ConfigurationBuilder()
+
+                // Add the stream store configuration data
                 .AddStreamStore(
                     subscribeToChanges: true,
+
+                    // When an error occurs while connecting to the database
+                    errorHandler: OnConnectError,
+
                     factory: config => 
-                        store = new MsSqlStreamStore(new MsSqlStreamStoreSettings(config["connectionString"]))
+                        // Create sql stream store instance. Uses connection string from ini file. 
+                        // Note, we're assigning an instance variable here, so we can dispose the instance later
+                        streamStore = new MsSqlStreamStore(new MsSqlStreamStoreSettings(config["connectionString"]))
                     )
+
+                // Also add the INI configuration data. This is where the connection string is read from
                 .AddConfiguration(ini)
                 .Build();
 
+            // Listen for configuration changes
             ChangeToken.OnChange(sssConfig.GetReloadToken, () =>
             {
                 Console.WriteLine("Settings changed:");
                 PrintSettings(sssConfig);
             });
 
+            // Print out the configuration settings present at startup
             Console.WriteLine("Found settings at startup:");
             PrintSettings(sssConfig);
 
+
+            // Keep going until enter is pressed. 
             Console.ReadLine();
+
+            // Stop the background thread and dispose SSS
             cts.Cancel();
-            store.Dispose();
+            streamStore.Dispose();
+        }
+
+        private static async Task<bool> OnConnectError(Exception ex, int retryCount)
+        {
+            await Task.Delay(2000);
+            Console.WriteLine($"Attempt {retryCount}, Sql Server is not yet available.. Retrying...");
+            return true;
         }
 
         private static void PrintSettings(IConfigurationRoot sssConfig)
@@ -65,37 +88,38 @@ namespace Config.SqlstreamStore.Example
 
         private static async Task CreateDatabase(string connectionString, CancellationToken ct)
         {
-            try
-            {
-                await Task.Delay(1000);
-                Console.WriteLine("Creating database schema");
-                await Task.Delay(3000);
-
-                var mgr = new DatabaseManager(connectionString);
-                mgr.EnsureDatabaseExists(10, 10);
-
-                var msSqlStreamStoreSettings = new MsSqlStreamStoreSettings(connectionString);
-
-                var store = new MsSqlStreamStore(msSqlStreamStoreSettings);
-                if (!(await store.CheckSchema(ct)).IsMatch())
+            while(true)
+                try
                 {
-                    await store.CreateSchema(ct);
-                }
+                    await Task.Delay(1000);
+                    Console.WriteLine("Creating database schema");
+                    await Task.Delay(3000);
 
-                var repo = new ConfigRepository(store);
+                    var mgr = new DatabaseManager(connectionString);
+                    mgr.EnsureDatabaseExists(10, 10);
 
-                while (!ct.IsCancellationRequested)
-                {
                     await Task.Delay(1000, ct);
-                    await repo.Modify(ct, ("setting1", DateTime.Now.ToLongTimeString()));
+
+                    var msSqlStreamStoreSettings = new MsSqlStreamStoreSettings(connectionString);
+
+                    var store = new MsSqlStreamStore(msSqlStreamStoreSettings);
+                    if (!(await store.CheckSchema(ct)).IsMatch())
+                    {
+                        await store.CreateSchema(ct);
+                    }
+
+                    var repo = new ConfigRepository(store);
+
+                    while (!ct.IsCancellationRequested)
+                    {
+                        await Task.Delay(1000, ct);
+                        await repo.Modify(ct, ("setting1", DateTime.Now.ToLongTimeString()));
+                    }
                 }
-            }
-            
-            catch (Exception ex)
-            {
-                Console.WriteLine("error while creating database: " + ex.Message);
-                throw;
-            }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("error while creating database: " + ex.Message);
+                }
         }
     }
 
@@ -116,10 +140,6 @@ namespace Config.SqlstreamStore.Example
                 var databaseName = _connectionStringBuilder.InitialCatalog;
                 return databaseName;
             }
-        }
-        public void DropDatabase()
-        {
-
         }
 
         public void EnsureDatabaseExists(int size, int fileGrowth)
