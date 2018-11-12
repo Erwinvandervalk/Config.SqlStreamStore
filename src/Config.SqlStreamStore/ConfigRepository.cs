@@ -12,6 +12,11 @@ namespace Config.SqlStreamStore
     public interface IConfigRepository
     {
         Task<ConfigurationSettings> GetLatest(CancellationToken ct);
+        Task<IConfigurationSettings> WriteChanges(IConfigurationSettings settings, CancellationToken ct);
+
+        IDisposable SubscribeToChanges(int version, 
+            ConfigRepository.OnSettingsChanged onSettingsChanged,
+            CancellationToken ct);
     }
 
     public class ConfigRepository : IConfigRepository
@@ -53,6 +58,15 @@ namespace Config.SqlStreamStore
 
             return new ConfigurationSettings(message.StreamVersion, message.CreatedUtc, configChanged.AllSettings);
         }
+
+        public async Task<IConfigurationSettings> Modify(CancellationToken ct,
+            params (string Key, string Value)[] modifications)
+        {
+            var currentData = await GetLatest(ct);
+            var modified = currentData.Modify(modifications);
+            return await WriteChanges(modified, ct);
+        }
+
 
         public async Task<IConfigurationSettings> WriteChanges(IConfigurationSettings settings, CancellationToken ct)
         {

@@ -12,7 +12,7 @@ namespace Config.SqlStreamStore
         public delegate IConfigRepository BuildConfigRepository();
         private readonly BuildStreamStoreFromConfig _buildStreamStoreFromConfig;
 
-
+        public bool SubscribeToChanges { get; set; }
 
         private readonly BuildConfigRepository _getConfigRepository;
 
@@ -52,7 +52,7 @@ namespace Config.SqlStreamStore
         {
             if (_getConfigRepository != null)
             {
-                return new StreamStoreConfigurationProvider(_getConfigRepository());
+                return new StreamStoreConfigurationProvider(this, _getConfigRepository());
             }
 
             var innerBuilder = new ConfigurationBuilder();
@@ -66,7 +66,7 @@ namespace Config.SqlStreamStore
 
             var repo = new ConfigRepository(_buildStreamStoreFromConfig(innerBuilder.Build()));
 
-            return new StreamStoreConfigurationProvider(repo);
+            return new StreamStoreConfigurationProvider(this, repo);
         
         }
 

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Primitives;
 
@@ -9,18 +10,46 @@ namespace Config.SqlStreamStore
 {
     public class StreamStoreConfigurationProvider : ConfigurationProvider
     {
+        private readonly StreamStoreConfigurationSource _source;
         private readonly IConfigRepository _configRepository;
+        private ConfigurationSettings _configurationSettings;
 
-        public StreamStoreConfigurationProvider(IConfigRepository configRepository)
+        public StreamStoreConfigurationProvider(StreamStoreConfigurationSource source,
+            IConfigRepository configRepository)
         {
+            _source = source;
             _configRepository = configRepository;
+
         }
         public override void Load()
         {
-            var settings = _configRepository
+            _configurationSettings = _configRepository
                 .GetLatest(CancellationToken.None).GetAwaiter().GetResult();
 
+            Data = _configurationSettings.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+
+            if (_source.SubscribeToChanges)
+            {
+                SubscribeToChanges(CancellationToken.None);
+            }
+
+        }
+
+        public IDisposable SubscribeToChanges(CancellationToken ct)
+        {
+            return _configRepository.SubscribeToChanges(
+                version: _configurationSettings?.Version ?? 0, 
+                onSettingsChanged: OnChanged, 
+                ct: CancellationToken.None);
+        }
+
+        private Task OnChanged(ConfigurationSettings settings, CancellationToken ct)
+        {
             Data = settings.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+
+            OnReload();
+
+            return Task.CompletedTask;
         }
     }
 }

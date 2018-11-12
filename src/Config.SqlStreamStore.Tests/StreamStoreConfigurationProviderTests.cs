@@ -1,7 +1,9 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Primitives;
 using SqlStreamStore;
 using Xunit;
 
@@ -91,15 +93,50 @@ namespace Config.SqlStreamStore.Tests
         [Fact]
         public async Task Can_reload_when_data_chagnes()
         {
+            // Create a SSS instance with some settings
             var instance = await BuildSteamStoreWithSettings(("setting1", "value1"));
 
             var config = new ConfigurationBuilder()
-                .Add(new StreamStoreConfigurationSource(() => instance))
+                .Add(new StreamStoreConfigurationSource(() => instance)
+                {
+                    SubscribeToChanges = true
+                })
                 .Build();
 
+            await new ConfigRepository(instance).Modify(CancellationToken.None,
+                ("setting1", "modified"));
 
+            await WaitUntil(() => config["setting1"] == "modified");
+
+            Assert.Equal("modified", config["setting1"]);
 
         }
+
+        [Fact]
+        public async Task Triggers_reload_token_on_change()
+        {
+            // Create a SSS instance with some settings
+            var instance = await BuildSteamStoreWithSettings(("setting1", "value1"));
+
+            var config = new ConfigurationBuilder()
+                .Add(new StreamStoreConfigurationSource(() => instance)
+                {
+                    SubscribeToChanges = true
+                })
+                .Build();
+
+            var tcs = new TaskCompletionSource<bool>();
+            ChangeToken.OnChange(config.GetReloadToken, () => tcs.SetResult(true));
+
+            await new ConfigRepository(instance).Modify(CancellationToken.None,
+                ("setting1", "modified"));
+
+            var noftifiedSettings = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(1)));
+
+            Assert.True(tcs.Task.IsCompleted);
+            Assert.Equal("modified", config["setting1"]);
+        }
+
 
         private static async Task<InMemoryStreamStore> BuildSteamStoreWithSettings(params (string key, string value)[] settings)
         {
@@ -110,6 +147,16 @@ namespace Config.SqlStreamStore.Tests
                 settings), CancellationToken.None);
 
             return instance;
+        }
+
+        private async Task WaitUntil(Func<bool> isTrue, TimeSpan? timeout = null)
+        {
+            var actualTimeout = timeout ?? TimeSpan.FromSeconds(1);
+            for (int i = 0; i < actualTimeout.TotalMilliseconds / 10; i++)
+            {
+                if(isTrue()) break;
+                await Task.Delay(10);
+            }
         }
     }
 }
