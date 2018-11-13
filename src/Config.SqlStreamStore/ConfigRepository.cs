@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +18,9 @@ namespace Config.SqlStreamStore
         IDisposable SubscribeToChanges(int version, 
             StreamStoreConfigRepository.OnSettingsChanged onSettingsChanged,
             CancellationToken ct);
+
+        Task<int?> GetMaxCount(CancellationToken ct);
+        Task SetMaxCount(int maxCount, CancellationToken ct);
     }
 
     public class StreamStoreConfigRepository : IStreamStoreConfigRepository
@@ -67,6 +71,21 @@ namespace Config.SqlStreamStore
             return await WriteChanges(modified, ct);
         }
 
+        public async Task<IReadOnlyList<IConfigurationSettings>> GetSettingsHistory(CancellationToken ct)
+        {
+            var maxCount = await GetMaxCount(ct) ?? Constants.DefaultMaxCount;
+            var stream = await _streamStore.ReadStreamBackwards(_streamId, StreamVersion.End, maxCount, true, ct);
+
+            var result = new List<IConfigurationSettings> ();
+            foreach (var message in stream.Messages.OrderBy(x => x.StreamVersion))
+            {
+                var setting = await BuildConfigurationSettingsFromMessage(message, ct);
+                result.Add(setting);
+            }
+
+            return result;
+        }
+
         public async Task<IConfigurationSettings> Modify(
             Func<IConfigurationSettings, CancellationToken, Task<ModifiedConfigurationSettings>> changeSettings, 
             ErrorHandler errorHandler,
@@ -92,9 +111,25 @@ namespace Config.SqlStreamStore
             throw new InvalidOperationException("Failed to write configuration settings");
         }
 
+        public async Task<int?> GetMaxCount(CancellationToken ct)
+        {
+            var metaData = await _streamStore.GetStreamMetadata(_streamId, ct);
+            return metaData?.MaxCount;
+        }
+
+        public async Task SetMaxCount(int maxCount, CancellationToken ct)
+        {
+            await _streamStore.SetStreamMetadata(_streamId, maxCount: maxCount, cancellationToken: ct);
+        }
 
         public async Task<IConfigurationSettings> WriteChanges(ModifiedConfigurationSettings settings, CancellationToken ct)
         {
+            if (await GetMaxCount(ct) == null)
+            {
+                // Ensure default value is set
+                await SetMaxCount(Constants.DefaultMaxCount, CancellationToken.None);
+            }
+
             var changes = settings.GetChanges();
 
             if (changes == null)

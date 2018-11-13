@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SqlStreamStore;
@@ -7,10 +8,11 @@ using Xunit;
 namespace Config.SqlStreamStore.Tests
 {
 
-    // Optimistic concurrency checks
+    // Max number of versions
     // Can roll back to a version
-    // wait until sql is available
-    // configure stream name
+    // List versions
+    // Hooks for encryption / decryption
+    // 
 
     public class ConfigRepositoryTests
     {
@@ -109,10 +111,11 @@ namespace Config.SqlStreamStore.Tests
                 return _streamStoreConfigRepository.Modify(
                     changeSettings: async (currentSettings, ct) =>
                     {
-                        if (++count == 2)
+                        if (Interlocked.Increment(ref count) == 2)
                         {
                             waitUntilBothStarted.SetResult(true);
                         }
+
                         await delayWriting.Task;
                         return currentSettings.WithModifiedSettings(("setting1", value));
                     },
@@ -140,6 +143,31 @@ namespace Config.SqlStreamStore.Tests
 
             Assert.Equal(2, saved.Version);
             Assert.True(errorHandlerInvoked);
+        }
+
+        [Fact]
+        public async Task Can_get_history()
+        {
+            // write 100 modifications, 0 .. 99
+            for (int i = 0; i < 100; i++)
+            {
+                await _streamStoreConfigRepository.Modify(CancellationToken.None, 
+                    ("setting", i.ToString()),
+                    ("othersetting", "constant")
+                    );
+            }
+
+            var history = await _streamStoreConfigRepository.GetSettingsHistory(CancellationToken.None);
+
+            Assert.Equal(Constants.DefaultMaxCount, history.Count);
+
+            // Check first and last entry
+            Assert.Equal("90", history.First()["setting"]); 
+            Assert.Equal("constant", history.First()["othersetting"]); 
+            Assert.Equal(90, history.First().Version);
+            Assert.Equal("99", history.Last()["setting"]);
+            Assert.Equal(99, history.Last().Version);
+            Assert.Equal("constant", history.Last()["othersetting"]);
         }
 
         private static ModifiedConfigurationSettings BuildNewSettings()

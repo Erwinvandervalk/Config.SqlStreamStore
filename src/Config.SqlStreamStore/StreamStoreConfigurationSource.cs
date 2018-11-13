@@ -16,12 +16,13 @@ namespace Config.SqlStreamStore
 
         private readonly BuildStreamStoreFromConfig _buildStreamStoreFromConfig;
 
+        public string StreamId { get; set; } = Constants.DefaultStreamName;
+
         public bool SubscribeToChanges { get; set; }
 
         public ErrorHandler ErrorHandler { get; set; }
 
         private readonly BuildConfigRepository _getConfigRepository;
-
 
         public StreamStoreConfigurationSource(BuildStreamStoreFromConfig buildStreamStoreFromConfig)
         {
@@ -44,10 +45,9 @@ namespace Config.SqlStreamStore
             });
         }
 
-        public StreamStoreConfigurationSource(Func<IStreamStore> getStreamStore) :
-            this(() => new StreamStoreConfigRepository(getStreamStore()))
+        public StreamStoreConfigurationSource(Func<IStreamStore> getStreamStore)
         {
-            
+            _getConfigRepository = () => BuildRepository(getStreamStore());
         }
 
         public StreamStoreConfigurationSource(BuildConfigRepository getConfigRepository)
@@ -71,11 +71,18 @@ namespace Config.SqlStreamStore
                 }
             }
 
-            var repo = new StreamStoreConfigRepository(_buildStreamStoreFromConfig(innerBuilder.Build()));
+            var streamStore = _buildStreamStoreFromConfig(innerBuilder.Build());
+            var streamStoreConfigRepository = BuildRepository(streamStore);
 
-            return new StreamStoreConfigurationProvider(this, repo);
-        
+            return new StreamStoreConfigurationProvider(this, streamStoreConfigRepository);
         }
 
+        private StreamStoreConfigRepository BuildRepository(IStreamStore streamStore)
+        {
+            var repo = new StreamStoreConfigRepository(
+                streamStore: streamStore,
+                streamId: StreamId);
+            return repo;
+        }
     }
 }
