@@ -1,18 +1,14 @@
 using System;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using SqlStreamStore;
 using Xunit;
 
 namespace Config.SqlStreamStore.Tests
 {
-
-    // Max number of versions
-    // Can roll back to a version
-    // List versions
-    // Hooks for encryption / decryption
-    // 
 
     public class ConfigRepositoryTests
     {
@@ -20,7 +16,8 @@ namespace Config.SqlStreamStore.Tests
 
         public ConfigRepositoryTests()
         {
-            _streamStoreConfigRepository = new StreamStoreConfigRepository(new InMemoryStreamStore());
+            _streamStoreConfigRepository = new StreamStoreConfigRepository(new InMemoryStreamStore(),
+                messageHooks: new Base64Hook());
         }
         
         [Fact]
@@ -32,7 +29,7 @@ namespace Config.SqlStreamStore.Tests
 
             var result = await _streamStoreConfigRepository.WriteChanges(settings, CancellationToken.None);
             Assert.Equal(0, result.Version);
-
+            Assert.Equal(new []{"setting1", "setting2"}, result.ModifiedKeys);
             var saved = await _streamStoreConfigRepository.GetLatest(CancellationToken.None);
 
             Assert.Equal(settings, saved);
@@ -63,7 +60,7 @@ namespace Config.SqlStreamStore.Tests
             Assert.NotEqual(settings, modified);
 
             var saved = await SaveSettings(modified);
-
+            Assert.Equal(new[] { "setting1" }, saved.DeletedKeys);
             Assert.Equal(modified, saved);
             Assert.False(saved.ContainsKey("setting1"));
         }
@@ -88,7 +85,7 @@ namespace Config.SqlStreamStore.Tests
                 return Task.CompletedTask;
             }
 
-            var subscription = _streamStoreConfigRepository.SubscribeToChanges(settings.Version, OnSettingsChanged,
+            var subscription = _streamStoreConfigRepository.WatchForChanges(settings.Version, OnSettingsChanged,
                 ct: CancellationToken.None);
 
             var modified = await _streamStoreConfigRepository.WriteChanges(settings.WithModifiedSettings(("setting1", "newValue")), CancellationToken.None);
@@ -191,12 +188,56 @@ namespace Config.SqlStreamStore.Tests
             Assert.Equal(expectedMaxCount, history.Count);
         }
 
+        [Fact]
+        public async Task Can_revert_to_previous_version()
+        {
+            // Write 5 modifications. 
+            for (int i = 0; i < 5; i++)
+            {
+                await _streamStoreConfigRepository.Modify(CancellationToken.None,
+                    ("setting", i.ToString()),
+                    ("othersetting", "constant")
+                );
+            }
+
+            var version1 = await _streamStoreConfigRepository.GetSpecificVersion(1, CancellationToken.None);
+
+            await _streamStoreConfigRepository.RevertToVersion(version1, CancellationToken.None);
+
+            var latest = await _streamStoreConfigRepository.GetLatest(CancellationToken.None);
+            Assert.Equal(version1["setting"], latest["setting"]);
+        }
+
         private static ModifiedConfigurationSettings BuildNewSettings()
         {
             var settings = new ModifiedConfigurationSettings(
                 ("setting1", "value1"),
                 ("setting2", "setting2"));
             return settings;
+        }
+
+        /// <summary>
+        /// This hook converts the input / output to and from Base64, just to see if the
+        /// hook actually works.
+        ///
+        /// Note, this is NOT encryption, nor should it ever be confused with encryption.
+        /// If you consider using this as a form of encryption, you should reconsider your
+        /// life choices that lead you up to this. 
+        /// </summary>
+        private class Base64Hook : IConfigurationSettingsHooks
+        {
+            public string OnReadMessage(string message)
+            {
+                return Encoding.UTF8.GetString(Convert.FromBase64String(message));
+            }
+
+            public string OnWriteMessage(string message)
+            {
+                return Convert.ToBase64String(Encoding.UTF8.GetBytes(message));
+                
+            }
+
+            public JsonSerializerSettings JsonSerializerSettings => new JsonSerializerSettings();
         }
     }
 }

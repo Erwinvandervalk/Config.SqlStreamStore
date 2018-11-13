@@ -9,6 +9,9 @@ using Microsoft.Extensions.Primitives;
 
 namespace Config.SqlStreamStore
 {
+    /// <summary>
+    /// The class that provides the configuration settings to be used inside the ConfigurationRoot class. 
+    /// </summary>
     public class StreamStoreConfigurationProvider : ConfigurationProvider
     {
         private readonly StreamStoreConfigurationSource _source;
@@ -22,6 +25,10 @@ namespace Config.SqlStreamStore
             _streamStoreConfigRepository = streamStoreConfigRepository;
 
         }
+
+        /// <summary>
+        /// Loads the settings from SSS. 
+        /// </summary>
         public override void Load()
         {
             int retryCount = 0;
@@ -57,14 +64,26 @@ namespace Config.SqlStreamStore
 
         }
 
+
+        /// <summary>
+        /// Subscribes to changes. 
+        /// </summary>
+        /// <param name="ct"></param>
+        /// <returns></returns>
         public IDisposable SubscribeToChanges(CancellationToken ct)
         {
-            return _streamStoreConfigRepository.SubscribeToChanges(
+            return _streamStoreConfigRepository.WatchForChanges(
                 version: _configurationSettings?.Version ?? 0, 
                 onSettingsChanged: OnChanged, 
                 ct: CancellationToken.None);
         }
 
+        /// <summary>
+        /// Invoked when changes have been detected. 
+        /// </summary>
+        /// <param name="settings"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
         private Task OnChanged(IConfigurationSettings settings, CancellationToken ct)
         {
             Data = settings.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);

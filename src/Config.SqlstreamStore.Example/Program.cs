@@ -15,7 +15,6 @@ namespace Config.SqlstreamStore.Example
 {
     class Program
     {
-        private static ILogger _logger;
         static void Main(string[] args)
         {
 
@@ -41,7 +40,7 @@ namespace Config.SqlstreamStore.Example
                     // When an error occurs while connecting to the database
                     errorHandler: OnConnectError,
 
-                    factory: config => 
+                    streamStoreFactory: config => 
                         // Create sql stream store instance. Uses connection string from ini file. 
                         // Note, we're assigning an instance variable here, so we can dispose the instance later
                         streamStore = new MsSqlStreamStore(new MsSqlStreamStoreSettings(config["connectionString"]))
@@ -128,7 +127,7 @@ namespace Config.SqlstreamStore.Example
                     Console.WriteLine($"There have historically been:{history.Count} versions: ");
                     foreach (var setting in history)
                     {
-                        Console.WriteLine($"\t- Version: {setting.Version} setting1 = '{setting["setting1"]}'");
+                        Console.WriteLine($"\t- Version: {setting.Version}, setting1 = '{setting["setting1"]}', ModifiedKeys: [{string.Join(',', setting.ModifiedKeys)}]");
                     }
 
                     Console.WriteLine($"Now reverting back to the first version's data: {history.First().Version}");

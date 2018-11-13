@@ -6,6 +6,9 @@ using System.Linq;
 namespace Config.SqlStreamStore
 {
 
+    /// <summary>
+    /// Represents configuration settings that have been modified, but not yet saved. 
+    /// </summary>
     public class ModifiedConfigurationSettings : IConfigurationSettings
     {
         public readonly ConfigurationSettings OriginalSettings;
@@ -20,7 +23,9 @@ namespace Config.SqlStreamStore
         }
 
 
-        public ModifiedConfigurationSettings(ConfigurationSettings originalSettings, IReadOnlyDictionary<string, string> changes)
+        public ModifiedConfigurationSettings(
+            ConfigurationSettings originalSettings, 
+            IReadOnlyDictionary<string, string> changes)
         {
             OriginalSettings = originalSettings ?? ConfigurationSettings.Empty();
             NewValues = changes ?? throw new ArgumentNullException(nameof(changes));
@@ -55,11 +60,11 @@ namespace Config.SqlStreamStore
         public ConfigChanged GetChanges()
         {
             var deleted = new HashSet<string>(
-                collection: OriginalSettings.Settings.Keys.Where(x => !NewValues.ContainsKey(x)),
+                collection: DeletedKeys,
                 comparer: StringComparer.InvariantCultureIgnoreCase);
 
             var modified = new HashSet<string>(
-                collection: NewValues.Where(IsModified).Select(x => x.Key), 
+                collection: ModifiedKeys, 
                 comparer: StringComparer.InvariantCultureIgnoreCase);
 
             if (!deleted.Any() && !modified.Any())
@@ -72,6 +77,14 @@ namespace Config.SqlStreamStore
                 modifiedSettings: modified, 
                 deletedSettings: deleted);
         }
+
+        public IReadOnlyList<string> DeletedKeys =>
+                OriginalSettings.Settings.Keys.Where(x => !NewValues.ContainsKey(x))
+                .ToArray();
+
+        public IReadOnlyList<string> ModifiedKeys => 
+            NewValues.Where(IsModified).Select(x => x.Key)
+                .ToArray();
 
         private bool IsModified(KeyValuePair<string, string> modifiedKvp)
         {

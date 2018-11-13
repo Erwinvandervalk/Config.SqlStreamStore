@@ -1,26 +1,43 @@
 ﻿using System;
-using System.Threading.Tasks;
+using Config.SqlStreamStore.Delegates;
 using Microsoft.Extensions.Configuration;
 using SqlStreamStore;
 
 namespace Config.SqlStreamStore
 {
-    public delegate IStreamStore BuildStreamStoreFromConnectionString(string connectionString);
-    public delegate IStreamStore BuildStreamStoreFromConfig(IConfigurationRoot configurationRoot);
-    public delegate IStreamStoreConfigRepository BuildConfigRepository();
-
-    public delegate Task<bool> ErrorHandler(Exception ex, int retryCount);
-
+    /// <summary>
+    /// Wires up a stream store confiuration setings provider. 
+    /// </summary>
     public class StreamStoreConfigurationSource : IConfigurationSource
     {
 
         private readonly BuildStreamStoreFromConfig _buildStreamStoreFromConfig;
 
+        /// <summary>
+        /// The name of the stream to store settings in. 
+        /// </summary>
         public string StreamId { get; set; } = Constants.DefaultStreamName;
 
+
+        /// <summary>
+        /// Should we subscribe to changes? Use ChangeToken.OnChange to monitor settings
+        /// </summary>
         public bool SubscribeToChanges { get; set; }
 
+        /// <summary>
+        /// Error handler for when SSS is not available
+        /// </summary>
         public ErrorHandler ErrorHandler { get; set; }
+
+        /// <summary>
+        /// Hook to implement encryption at rest
+        /// </summary>
+        public IConfigurationSettingsHooks MessageHooks { get; set; }
+
+        /// <summary>
+        /// Hook to implement custom stream watching. 
+        /// </summary>
+        public IChangeWatcher ChangeWatcher { get; set; }
 
         private readonly BuildConfigRepository _getConfigRepository;
 
@@ -81,7 +98,9 @@ namespace Config.SqlStreamStore
         {
             var repo = new StreamStoreConfigRepository(
                 streamStore: streamStore,
-                streamId: StreamId);
+                streamId: StreamId,
+                messageHooks: MessageHooks,
+                changeWatcher: ChangeWatcher);
             return repo;
         }
     }

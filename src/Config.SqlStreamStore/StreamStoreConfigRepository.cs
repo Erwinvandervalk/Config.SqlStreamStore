@@ -3,26 +3,37 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Config.SqlStreamStore.Delegates;
 using Newtonsoft.Json;
 using SqlStreamStore;
 using SqlStreamStore.Streams;
-using SqlStreamStore.Subscriptions;
 
 namespace Config.SqlStreamStore
 {
+    /// <summary>
+    /// Class responsible for reading / writing / modifying / watching configuration settings from a stream store implementation. 
+    /// </summary>
     public class StreamStoreConfigRepository : IStreamStoreConfigRepository
     {
-        public delegate Task OnSettingsChanged(IConfigurationSettings settings, CancellationToken ct);
-
         private readonly IStreamStore _streamStore;
         private readonly StreamId _streamId;
+        private readonly IChangeWatcher _changeWatcher;
+        private readonly IConfigurationSettingsHooks _messageHooks;
 
-        public StreamStoreConfigRepository(IStreamStore streamStore, string streamId = Constants.DefaultStreamName)
+        public StreamStoreConfigRepository(
+            IStreamStore streamStore, 
+            string streamId = Constants.DefaultStreamName,
+            IConfigurationSettingsHooks messageHooks = null,
+            IChangeWatcher changeWatcher = null)
         {
             _streamStore = streamStore;
             _streamId = streamId;
+            _changeWatcher = changeWatcher;
+            _messageHooks = messageHooks ?? new NoOpHooks();
+            _changeWatcher = changeWatcher ?? new SubscriptionBasedChangeWatcher(_streamStore, _streamId, _messageHooks);
         }
 
+        /// <inheritdoc />
         public async Task<IConfigurationSettings> GetLatest(CancellationToken ct)
         {
             var lastPage = await _streamStore.ReadStreamBackwards(
@@ -37,19 +48,32 @@ namespace Config.SqlStreamStore
             }
 
             var lastMessage = lastPage.Messages.First();
-            return await BuildConfigurationSettingsFromMessage(lastMessage, ct);
+            return await BuildConfigurationSettingsFromMessage(lastMessage, _messageHooks, ct);
         }
 
-        private static async Task<IConfigurationSettings> BuildConfigurationSettingsFromMessage(
-            StreamMessage message, CancellationToken ct)
+        /// <summary>
+        /// Builds the configuration settings from the stream message. 
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="messageHooks"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        public static async Task<IConfigurationSettings> BuildConfigurationSettingsFromMessage(
+            StreamMessage message, IConfigurationSettingsHooks messageHooks, CancellationToken ct)
         {
-            var data = await message.GetJsonData(ct);
+            var data = messageHooks.OnReadMessage(await message.GetJsonData(ct));
 
-            var configChanged = JsonConvert.DeserializeObject<ConfigChanged>(data);
+            var configChanged = JsonConvert.DeserializeObject<ConfigChanged>(data, messageHooks.JsonSerializerSettings);
 
-            return new ConfigurationSettings(message.StreamVersion, message.CreatedUtc, configChanged.AllSettings);
+            return new ConfigurationSettings(
+                message.StreamVersion, 
+                message.CreatedUtc, 
+                configChanged.AllSettings, 
+                configChanged.ModifiedSettings, 
+                configChanged.DeletedSettings);
         }
 
+        /// <inheritdoc />
         public async Task<IConfigurationSettings> Modify(CancellationToken ct,
             params (string Key, string Value)[] modifications)
         {
@@ -58,6 +82,7 @@ namespace Config.SqlStreamStore
             return await WriteChanges(modified, ct);
         }
 
+        /// <inheritdoc />
         public async Task<IReadOnlyList<IConfigurationSettings>> GetSettingsHistory(CancellationToken ct)
         {
             var maxCount = await GetMaxCount(ct) ?? Constants.DefaultMaxCount;
@@ -66,15 +91,16 @@ namespace Config.SqlStreamStore
             var result = new List<IConfigurationSettings> ();
             foreach (var message in stream.Messages.OrderBy(x => x.StreamVersion))
             {
-                var setting = await BuildConfigurationSettingsFromMessage(message, ct);
+                var setting = await BuildConfigurationSettingsFromMessage(message, _messageHooks, ct);
                 result.Add(setting);
             }
 
             return result;
         }
 
+        /// <inheritdoc />
         public async Task<IConfigurationSettings> Modify(
-            Func<IConfigurationSettings, CancellationToken, Task<ModifiedConfigurationSettings>> changeSettings, 
+        Func<IConfigurationSettings, CancellationToken, Task<ModifiedConfigurationSettings>> changeSettings, 
             ErrorHandler errorHandler,
             CancellationToken ct)
         {
@@ -98,17 +124,20 @@ namespace Config.SqlStreamStore
             throw new InvalidOperationException("Failed to write configuration settings");
         }
 
+        /// <inheritdoc />
         public async Task<int?> GetMaxCount(CancellationToken ct)
         {
             var metaData = await _streamStore.GetStreamMetadata(_streamId, ct);
             return metaData?.MaxCount;
         }
 
+        /// <inheritdoc />
         public async Task SetMaxCount(int maxCount, CancellationToken ct)
         {
             await _streamStore.SetStreamMetadata(_streamId, maxCount: maxCount, cancellationToken: ct);
         }
 
+        /// <inheritdoc />
         public async Task<IConfigurationSettings> WriteChanges(ModifiedConfigurationSettings settings, CancellationToken ct)
         {
             if (await GetMaxCount(ct) == null)
@@ -123,53 +152,26 @@ namespace Config.SqlStreamStore
                 // Nothing to save
                 return settings;
 
+            var serializeObject = _messageHooks.OnWriteMessage(JsonConvert.SerializeObject(changes));
+
             var result = await _streamStore.AppendToStream(
                 streamId: _streamId, 
                 expectedVersion: settings.Version, 
-                message: new NewStreamMessage(Guid.NewGuid(), Constants.ConfigChangedMessageName, JsonConvert.SerializeObject(changes)), 
+                message: new NewStreamMessage(Guid.NewGuid(), Constants.ConfigChangedMessageName, serializeObject), 
                 cancellationToken:ct);
 
-            return new ConfigurationSettings(result.CurrentVersion, null, changes.AllSettings);
+            return new ConfigurationSettings(result.CurrentVersion, null, changes.AllSettings, changes.ModifiedSettings, changes.DeletedSettings);
         }
 
-        public IDisposable SubscribeToChanges(int version, 
+        /// <inheritdoc />
+        public IDisposable WatchForChanges(int version, 
             OnSettingsChanged onSettingsChanged,
             CancellationToken ct)
         {
-            IStreamSubscription subscription = null;
-
-
-            async Task StreamMessageReceived(IStreamSubscription _, StreamMessage streamMessage,
-                CancellationToken cancellationToken)
-            {
-                var settings = await BuildConfigurationSettingsFromMessage(streamMessage, ct);
-                await onSettingsChanged(settings, ct);
-            };
-
-            void SubscriptionDropped(IStreamSubscription _, SubscriptionDroppedReason reason,
-                Exception exception = null)
-            {
-                if (reason != SubscriptionDroppedReason.Disposed)
-                {
-                    SetupSubscription();
-                }
-            };
-
-            void SetupSubscription()
-            {
-                subscription = _streamStore.SubscribeToStream(
-                    streamId: _streamId,
-                    continueAfterVersion: version,
-                    streamMessageReceived: StreamMessageReceived,
-                    subscriptionDropped: SubscriptionDropped);
-            }
-
-            SetupSubscription();
-
-            return subscription;
+            return _changeWatcher.WatchForChanges(version, onSettingsChanged, ct);
         }
 
-
+        /// <inheritdoc />
         public async Task<IConfigurationSettings> GetSpecificVersion(int version, CancellationToken ct)
         {
             var streamPage = await _streamStore.ReadStreamBackwards(_streamId, version, 1, ct);
@@ -179,9 +181,10 @@ namespace Config.SqlStreamStore
 
             var msg = streamPage.Messages.First();
             
-            return await BuildConfigurationSettingsFromMessage(msg, ct);
+            return await BuildConfigurationSettingsFromMessage(msg, _messageHooks, ct);
         }
 
+        /// <inheritdoc />
         public async Task RevertToVersion(IConfigurationSettings settings, CancellationToken ct)
         {
             var latest = await GetLatest(ct);
@@ -204,6 +207,21 @@ namespace Config.SqlStreamStore
             {
                 Action();
             }
+        }
+
+        private class NoOpHooks : IConfigurationSettingsHooks
+        {
+            public string OnReadMessage(string message)
+            {
+                return message;
+            }
+
+            public string OnWriteMessage(string message)
+            {
+                return message;
+            }
+
+            public JsonSerializerSettings JsonSerializerSettings => new JsonSerializerSettings();
         }
     }
 }
