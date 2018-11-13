@@ -13,7 +13,7 @@ namespace Config.SqlStreamStore
     {
         private readonly StreamStoreConfigurationSource _source;
         private readonly IStreamStoreConfigRepository _streamStoreConfigRepository;
-        private ConfigurationSettings _configurationSettings;
+        private IConfigurationSettings _configurationSettings;
         
         public StreamStoreConfigurationProvider(StreamStoreConfigurationSource source,
             IStreamStoreConfigRepository streamStoreConfigRepository)
@@ -65,7 +65,7 @@ namespace Config.SqlStreamStore
                 ct: CancellationToken.None);
         }
 
-        private Task OnChanged(ConfigurationSettings settings, CancellationToken ct)
+        private Task OnChanged(IConfigurationSettings settings, CancellationToken ct)
         {
             Data = settings.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
 

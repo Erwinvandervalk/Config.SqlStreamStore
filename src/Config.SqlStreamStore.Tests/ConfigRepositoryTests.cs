@@ -68,7 +68,7 @@ namespace Config.SqlStreamStore.Tests
             Assert.False(saved.ContainsKey("setting1"));
         }
 
-        private async Task<ConfigurationSettings> SaveSettings(ModifiedConfigurationSettings settings)
+        private async Task<IConfigurationSettings> SaveSettings(ModifiedConfigurationSettings settings)
         {
             await _streamStoreConfigRepository.WriteChanges(settings, CancellationToken.None);
 
@@ -80,9 +80,9 @@ namespace Config.SqlStreamStore.Tests
         {
             var settings = await SaveSettings(BuildNewSettings());
 
-            var tcs = new TaskCompletionSource<ConfigurationSettings>();
+            var tcs = new TaskCompletionSource<IConfigurationSettings>();
 
-            Task OnSettingsChanged(ConfigurationSettings configurationSettings, CancellationToken ct)
+            Task OnSettingsChanged(IConfigurationSettings configurationSettings, CancellationToken ct)
             {
                 tcs.SetResult(configurationSettings);
                 return Task.CompletedTask;
@@ -168,6 +168,27 @@ namespace Config.SqlStreamStore.Tests
             Assert.Equal("99", history.Last()["setting"]);
             Assert.Equal(99, history.Last().Version);
             Assert.Equal("constant", history.Last()["othersetting"]);
+        }
+
+
+        [Fact]
+        public async Task Can_get_history_when_maxcount_is_set()
+        {
+            const int expectedMaxCount = 5;
+            await _streamStoreConfigRepository.SetMaxCount(expectedMaxCount, CancellationToken.None);
+
+            // write 10 modifications, 0 .. 10
+            for (int i = 0; i < 10; i++)
+            {
+                await _streamStoreConfigRepository.Modify(CancellationToken.None,
+                    ("setting", i.ToString()),
+                    ("othersetting", "constant")
+                );
+            }
+
+            var history = await _streamStoreConfigRepository.GetSettingsHistory(CancellationToken.None);
+
+            Assert.Equal(expectedMaxCount, history.Count);
         }
 
         private static ModifiedConfigurationSettings BuildNewSettings()

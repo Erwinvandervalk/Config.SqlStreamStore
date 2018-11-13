@@ -10,22 +10,9 @@ using SqlStreamStore.Subscriptions;
 
 namespace Config.SqlStreamStore
 {
-    public interface IStreamStoreConfigRepository
-    {
-        Task<ConfigurationSettings> GetLatest(CancellationToken ct);
-        Task<IConfigurationSettings> WriteChanges(ModifiedConfigurationSettings settings, CancellationToken ct);
-
-        IDisposable SubscribeToChanges(int version, 
-            StreamStoreConfigRepository.OnSettingsChanged onSettingsChanged,
-            CancellationToken ct);
-
-        Task<int?> GetMaxCount(CancellationToken ct);
-        Task SetMaxCount(int maxCount, CancellationToken ct);
-    }
-
     public class StreamStoreConfigRepository : IStreamStoreConfigRepository
     {
-        public delegate Task OnSettingsChanged(ConfigurationSettings settings, CancellationToken ct);
+        public delegate Task OnSettingsChanged(IConfigurationSettings settings, CancellationToken ct);
 
         private readonly IStreamStore _streamStore;
         private readonly StreamId _streamId;
@@ -36,7 +23,7 @@ namespace Config.SqlStreamStore
             _streamId = streamId;
         }
 
-        public async Task<ConfigurationSettings> GetLatest(CancellationToken ct)
+        public async Task<IConfigurationSettings> GetLatest(CancellationToken ct)
         {
             var lastPage = await _streamStore.ReadStreamBackwards(
                 streamId: new StreamId(_streamId), 
@@ -53,7 +40,7 @@ namespace Config.SqlStreamStore
             return await BuildConfigurationSettingsFromMessage(lastMessage, ct);
         }
 
-        private static async Task<ConfigurationSettings> BuildConfigurationSettingsFromMessage(
+        private static async Task<IConfigurationSettings> BuildConfigurationSettingsFromMessage(
             StreamMessage message, CancellationToken ct)
         {
             var data = await message.GetJsonData(ct);
@@ -181,6 +168,29 @@ namespace Config.SqlStreamStore
 
             return subscription;
         }
+
+
+        public async Task<IConfigurationSettings> GetSpecificVersion(int version, CancellationToken ct)
+        {
+            var streamPage = await _streamStore.ReadStreamBackwards(_streamId, version, 1, ct);
+
+            if (!streamPage.Messages.Any())
+                return null;
+
+            var msg = streamPage.Messages.First();
+            
+            return await BuildConfigurationSettingsFromMessage(msg, ct);
+        }
+
+        public async Task RevertToVersion(IConfigurationSettings settings, CancellationToken ct)
+        {
+            var latest = await GetLatest(ct);
+
+            var modified = latest.WithAllSettingsReplaced(settings);
+
+            await WriteChanges(modified, ct);
+        }
+
 
         private class DelegateDisposable : IDisposable
         {

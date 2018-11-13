@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Data;
 using System.Data.SqlClient;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Config.SqlStreamStore;
@@ -88,7 +89,10 @@ namespace Config.SqlstreamStore.Example
 
         private static async Task CreateDatabase(string connectionString, CancellationToken ct)
         {
+            // There is a while true loop here, because sometimes after creating the db, the db is not available always. 
+            // There are much better ways of handling this, but I couldn't be bothered right now;)
             while(true)
+            {
                 try
                 {
                     await Task.Delay(1000);
@@ -97,8 +101,8 @@ namespace Config.SqlstreamStore.Example
 
                     var mgr = new DatabaseManager(connectionString);
                     mgr.EnsureDatabaseExists(10, 10);
-
-                    await Task.Delay(1000, ct);
+                    
+                    await Task.Delay(2000, ct);
 
                     var msSqlStreamStoreSettings = new MsSqlStreamStoreSettings(connectionString);
 
@@ -110,16 +114,37 @@ namespace Config.SqlstreamStore.Example
 
                     var repo = new StreamStoreConfigRepository(store);
 
-                    while (!ct.IsCancellationRequested)
+                    Console.WriteLine("Now generating 20 changes:");
+
+                    for(int i = 0; i < 20; i++)
                     {
                         await Task.Delay(1000, ct);
-                        await repo.Modify(ct, ("setting1", DateTime.Now.ToLongTimeString()));
+                        await repo.Modify(ct, ("setting1", "new value, written at: " + DateTime.Now.ToLongTimeString()));
                     }
+
+                    // Delay for a while, so the latest version can be printed. 
+                    await Task.Delay(1000, ct);
+                    var history = await repo.GetSettingsHistory(ct);
+                    Console.WriteLine($"There have historically been:{history.Count} versions: ");
+                    foreach (var setting in history)
+                    {
+                        Console.WriteLine($"\t- Version: {setting.Version} setting1 = '{setting["setting1"]}'");
+                    }
+
+                    Console.WriteLine($"Now reverting back to the first version's data: {history.First().Version}");
+
+                    // Now revert back to the first version (this actually creates a new version, with the old data in it)
+                    await repo.RevertToVersion(history.First(), ct);
+
+
+                    // Completed succesfully. End the function
+                    return;
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("error while creating database: " + ex.Message);
+                    Console.WriteLine("error while creating database: " + ex.Message + " (will retry)");
                 }
+            }
         }
     }
 
